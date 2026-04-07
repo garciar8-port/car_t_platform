@@ -116,6 +116,7 @@ class PPOSchedulingAgent:
         self.config = config or TrainingConfig()
         self._env: CARTSchedulingEnv | None = None
         self._model: MaskablePPO | None = None
+        self._explainer = None  # Lazily initialized SHAPExplainer
 
     def train(self) -> TrainingMetrics:
         """Train the MaskablePPO agent. Returns training metrics."""
@@ -165,6 +166,24 @@ class PPOSchedulingAgent:
             obs, deterministic=deterministic, action_masks=action_masks
         )
         return int(action)
+
+    def predict_with_explanation(
+        self,
+        obs: np.ndarray,
+        action_masks: np.ndarray | None = None,
+    ):
+        """Get action and SHAP explanation for a single observation.
+
+        Returns (action, ExplanationResult) tuple.
+        The explainer is lazily initialized on first call.
+        """
+        assert self._model is not None, "Model not trained or loaded"
+
+        if self._explainer is None:
+            from bioflow_scheduler.explainer.shap_explainer import SHAPExplainer
+            self._explainer = SHAPExplainer(self, n_background=100)
+
+        return self._explainer.explain(obs, action_masks=action_masks)
 
     def evaluate(
         self,

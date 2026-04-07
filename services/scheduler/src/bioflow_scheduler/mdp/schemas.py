@@ -249,6 +249,12 @@ class RewardWeights(BaseModel):
         ge=0.0,
         description="Immediate bonus per valid patient-to-suite assignment (zeta)",
     )
+    acuity_exponent: float = Field(
+        default=2.0,
+        ge=1.0,
+        description="Exponent for acuity-weighted wait penalty. "
+        "At 2.0, a patient with acuity 0.9 generates ~4x the penalty of acuity 0.45",
+    )
 
 
 class RewardComponents(BaseModel):
@@ -281,14 +287,21 @@ class Reward(BaseModel):
         successful_infusions: int = 0,
         constraint_violations: int = 0,
         valid_assignments: int = 0,
+        acuity_weighted_wait_days: float | None = None,
     ) -> Reward:
         """Compute reward from raw metrics and weights.
 
         R = -alpha * wait - beta * idle - gamma * fail
             + delta * infusion - epsilon * violations + zeta * assignments
+
+        If acuity_weighted_wait_days is provided, it replaces flat wait_time_days.
         """
+        effective_wait = (
+            acuity_weighted_wait_days if acuity_weighted_wait_days is not None
+            else wait_time_days
+        )
         components = RewardComponents(
-            wait_time_penalty=-weights.wait_time * wait_time_days,
+            wait_time_penalty=-weights.wait_time * effective_wait,
             idle_time_penalty=-weights.idle_time * idle_time_days,
             batch_failure_penalty=-weights.batch_failure * batch_failures,
             infusion_reward=weights.successful_infusion * successful_infusions,

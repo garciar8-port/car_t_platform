@@ -30,6 +30,13 @@ from bioflow_scheduler.mdp.schemas import (
     Suite,
     SuiteStatus,
 )
+from bioflow_scheduler.simulator.scenarios import (
+    EquipmentFailure,
+    PatientSurge,
+    QCFailureWave,
+    ScenarioType,
+    SupplyShortage,
+)
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -112,6 +119,7 @@ class IntervalMetrics:
     """Metrics accumulated during a single decision interval."""
 
     wait_time_days: float = 0.0
+    acuity_weighted_wait_days: float = 0.0
     idle_time_days: float = 0.0
     successful_infusions: int = 0
     batch_failures: int = 0
@@ -141,9 +149,11 @@ class ManufacturingSimulator:
         self,
         config: FacilityConfig | None = None,
         phase_durations: dict[BatchPhase, PhaseDurationConfig] | None = None,
+        scenarios: list[ScenarioType] | None = None,
     ) -> None:
         self.config = config or FacilityConfig()
         self.phase_durations = phase_durations or dict(DEFAULT_PHASE_DURATIONS)
+        self.scenarios = scenarios or []
 
         # These are initialized in reset()
         self._simpy_env: simpy.Environment | None = None
@@ -199,6 +209,11 @@ class ManufacturingSimulator:
         # Start background processes
         self._simpy_env.process(self._patient_arrival_process())
 
+        # Start scenario processes
+        for scenario in self.scenarios:
+            if isinstance(scenario, EquipmentFailure):
+                self._simpy_env.process(self._equipment_failure_process(scenario))
+
         return self._build_state()
 
     def step(
@@ -224,6 +239,9 @@ class ManufacturingSimulator:
             1 for s in self._suite_states.values() if s.status == SuiteStatus.IDLE
         )
 
+        # Apply supply shortage scenarios
+        self._apply_supply_shortages()
+
         # Advance simulation to next decision point
         interval_hours = self.config.decision_interval_hours
         target_time = self._simpy_env.now + interval_hours
@@ -232,8 +250,14 @@ class ManufacturingSimulator:
         # Compute interval metrics
         interval_days = interval_hours / HOURS_PER_DAY
 
-        # Wait time: each waiting patient accumulates wait during the interval
+        # Wait time: acuity-weighted — sicker patients generate more penalty
+        acuity_exp = self.config.reward_weights.acuity_exponent
+        acuity_weighted_wait = sum(
+            (p.acuity_score ** acuity_exp) * interval_days
+            for p in self._patient_queue[:num_waiting_before]
+        )
         self._interval_metrics.wait_time_days += num_waiting_before * interval_days
+        self._interval_metrics.acuity_weighted_wait_days += acuity_weighted_wait
 
         # Idle time: each idle suite accumulates idle time during the interval
         self._interval_metrics.idle_time_days += idle_suites_before * interval_days
@@ -252,6 +276,7 @@ class ManufacturingSimulator:
             successful_infusions=self._interval_metrics.successful_infusions,
             constraint_violations=self._interval_metrics.constraint_violations,
             valid_assignments=self._interval_metrics.valid_assignments,
+            acuity_weighted_wait_days=self._interval_metrics.acuity_weighted_wait_days,
         )
 
         self._episode_step += 1
@@ -422,9 +447,9 @@ class ManufacturingSimulator:
             duration_hours = self._sample_phase_duration(phase) * HOURS_PER_DAY
             yield self._simpy_env.timeout(duration_hours)
 
-            # QC phase: check pass/fail
+            # QC phase: check pass/fail (scenario-aware)
             if phase == BatchPhase.QC:
-                passed = self._rng.random() < self.config.transition_distributions.qc_pass_probability
+                passed = self._rng.random() < self._get_qc_pass_probability()
                 batch.qc_passed = passed
                 if not passed:
                     batch.failed = True
@@ -461,15 +486,40 @@ class ManufacturingSimulator:
         assert self._simpy_env is not None
         assert self._rng is not None
 
-        rate = self.config.transition_distributions.patient_arrival_rate
         # Inter-arrival time is exponential with mean = 1/rate (in days)
         while True:
+            rate = self._get_arrival_rate()  # scenario-aware
             inter_arrival_days = self._rng.exponential(1.0 / rate)
             inter_arrival_hours = inter_arrival_days * HOURS_PER_DAY
             yield self._simpy_env.timeout(inter_arrival_hours)
 
             patient = self._generate_random_patient()
             self._patient_queue.append(patient)
+
+    def _equipment_failure_process(self, scenario: EquipmentFailure):  # type: ignore[return]
+        """SimPy process: simulate equipment failure at a scheduled time."""  # noqa: D401
+        assert self._simpy_env is not None
+
+        # Wait until the failure day
+        yield self._simpy_env.timeout(scenario.day * HOURS_PER_DAY)
+
+        # Find the target suite
+        suite_ids = sorted(self._suite_states.keys())
+        if scenario.suite_index >= len(suite_ids):
+            return
+        suite_id = suite_ids[scenario.suite_index]
+        suite = self._suite_states[suite_id]
+
+        # Put suite into maintenance
+        suite.status = SuiteStatus.MAINTENANCE
+        suite.batch_id = None
+        suite.phase = None
+
+        # Wait for repair
+        yield self._simpy_env.timeout(scenario.downtime_days * HOURS_PER_DAY)
+
+        # Restore suite
+        suite.status = SuiteStatus.IDLE
 
     # ------------------------------------------------------------------
     # Stochastic sampling
@@ -517,6 +567,62 @@ class ManufacturingSimulator:
             days_waiting=0,
             cell_viability_days_remaining=int(self._rng.integers(14, 30)),
         )
+
+    # ------------------------------------------------------------------
+    # Scenario helpers
+    # ------------------------------------------------------------------
+
+    def _current_day(self) -> float:
+        """Current simulation day."""
+        assert self._simpy_env is not None
+        return self._simpy_env.now / HOURS_PER_DAY
+
+    def _get_qc_pass_probability(self) -> float:
+        """QC pass probability, accounting for any active QCFailureWave."""
+        day = self._current_day()
+        for s in self.scenarios:
+            if isinstance(s, QCFailureWave):
+                if s.start_day <= day < s.start_day + s.duration_days:
+                    return 1.0 - s.failure_rate
+        return self.config.transition_distributions.qc_pass_probability
+
+    def _get_arrival_rate(self) -> float:
+        """Patient arrival rate, accounting for any active PatientSurge."""
+        day = self._current_day()
+        rate = self.config.transition_distributions.patient_arrival_rate
+        for s in self.scenarios:
+            if isinstance(s, PatientSurge):
+                if s.start_day <= day < s.start_day + s.duration_days:
+                    rate *= s.arrival_rate_multiplier
+        return rate
+
+    def _apply_supply_shortages(self) -> None:
+        """Apply any supply shortage scenarios that have triggered."""
+        assert self._inventory is not None
+        day = self._current_day()
+        for s in self.scenarios:
+            if isinstance(s, SupplyShortage) and day >= s.start_day:
+                if s.resource == "media":
+                    if self._inventory.media_units > s.remaining_units:
+                        self._inventory = Inventory(
+                            media_units=s.remaining_units,
+                            viral_vector_doses=self._inventory.viral_vector_doses,
+                            reagent_kits=self._inventory.reagent_kits,
+                        )
+                elif s.resource == "viral_vector":
+                    if self._inventory.viral_vector_doses > s.remaining_units:
+                        self._inventory = Inventory(
+                            media_units=self._inventory.media_units,
+                            viral_vector_doses=s.remaining_units,
+                            reagent_kits=self._inventory.reagent_kits,
+                        )
+                elif s.resource == "reagent":
+                    if self._inventory.reagent_kits > s.remaining_units:
+                        self._inventory = Inventory(
+                            media_units=self._inventory.media_units,
+                            viral_vector_doses=self._inventory.viral_vector_doses,
+                            reagent_kits=s.remaining_units,
+                        )
 
     # ------------------------------------------------------------------
     # Estimation helpers
