@@ -244,6 +244,11 @@ class RewardWeights(BaseModel):
         ge=0.0,
         description="Penalty per hard constraint violation (epsilon)",
     )
+    valid_assignment: float = Field(
+        default=10.0,
+        ge=0.0,
+        description="Immediate bonus per valid patient-to-suite assignment (zeta)",
+    )
 
 
 class RewardComponents(BaseModel):
@@ -254,6 +259,7 @@ class RewardComponents(BaseModel):
     batch_failure_penalty: float = 0.0
     infusion_reward: float = 0.0
     constraint_violation_penalty: float = 0.0
+    assignment_bonus: float = 0.0
 
 
 class Reward(BaseModel):
@@ -274,11 +280,12 @@ class Reward(BaseModel):
         batch_failures: int = 0,
         successful_infusions: int = 0,
         constraint_violations: int = 0,
+        valid_assignments: int = 0,
     ) -> Reward:
         """Compute reward from raw metrics and weights.
 
         R = -alpha * wait - beta * idle - gamma * fail
-            + delta * infusion - epsilon * violations
+            + delta * infusion - epsilon * violations + zeta * assignments
         """
         components = RewardComponents(
             wait_time_penalty=-weights.wait_time * wait_time_days,
@@ -286,6 +293,7 @@ class Reward(BaseModel):
             batch_failure_penalty=-weights.batch_failure * batch_failures,
             infusion_reward=weights.successful_infusion * successful_infusions,
             constraint_violation_penalty=-weights.constraint_violation * constraint_violations,
+            assignment_bonus=weights.valid_assignment * valid_assignments,
         )
         total = (
             components.wait_time_penalty
@@ -293,6 +301,7 @@ class Reward(BaseModel):
             + components.batch_failure_penalty
             + components.infusion_reward
             + components.constraint_violation_penalty
+            + components.assignment_bonus
         )
         return cls(total=total, components=components)
 

@@ -38,8 +38,10 @@ services/frontend/dist/
 *.pt
 *.pth
 *.onnx
+*.zip
 mlruns/
 models/
+training/results/
 
 # Claude
 .claude/

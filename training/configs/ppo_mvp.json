@@ -1,0 +1,25 @@
+{
+  "learning_rate": 3e-4,
+  "n_steps": 2048,
+  "batch_size": 64,
+  "n_epochs": 10,
+  "gamma": 0.95,
+  "gae_lambda": 0.95,
+  "clip_range": 0.2,
+  "ent_coef": 0.01,
+  "vf_coef": 0.5,
+  "max_grad_norm": 0.5,
+  "total_timesteps": 500000,
+  "log_interval": 10,
+  "net_arch_pi": [128, 128],
+  "net_arch_vf": [128, 128],
+  "facility_config": {
+    "num_suites": 6,
+    "seed": 42,
+    "max_episode_days": 90,
+    "decision_interval_hours": 8.0
+  },
+  "max_patients": 20,
+  "save_path": "training/results/ppo_mvp",
+  "seed": 42
+}

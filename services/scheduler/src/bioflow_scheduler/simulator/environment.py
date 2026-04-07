@@ -116,6 +116,7 @@ class IntervalMetrics:
     successful_infusions: int = 0
     batch_failures: int = 0
     constraint_violations: int = 0
+    valid_assignments: int = 0
 
 
 # ---------------------------------------------------------------------------
@@ -250,6 +251,7 @@ class ManufacturingSimulator:
             batch_failures=self._interval_metrics.batch_failures,
             successful_infusions=self._interval_metrics.successful_infusions,
             constraint_violations=self._interval_metrics.constraint_violations,
+            valid_assignments=self._interval_metrics.valid_assignments,
         )
 
         self._episode_step += 1
@@ -399,6 +401,7 @@ class ManufacturingSimulator:
         # Start batch process
         self._simpy_env.process(self._run_batch(batch))  # type: ignore[union-attr]
 
+        self._interval_metrics.valid_assignments += 1
         return 0
 
     # ------------------------------------------------------------------

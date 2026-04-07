@@ -191,13 +191,24 @@ class CARTSchedulingEnv(gym.Env):
         queue = self._current_state.patient_queue
         suites = self._current_state.suites
 
-        # Out-of-range patient or suite → treat as no-op (will get violation penalty)
+        # Out-of-range patient or suite → treat as no-op
         if patient_idx >= len(queue) or suite_idx >= len(suites):
             return NoOpAction()
 
+        # If selected suite is not idle, find the first idle suite instead
+        # This helps the agent learn assignment behavior even with imperfect
+        # suite selection, reducing the effective action space complexity.
+        target_suite = suites[suite_idx]
+        if target_suite.status != SuiteStatus.IDLE:
+            idle = self._current_state.idle_suites
+            if idle:
+                target_suite = idle[0]
+            else:
+                return NoOpAction()
+
         return AssignAction(
             patient_id=queue[patient_idx].patient_id,
-            suite_id=suites[suite_idx].id,
+            suite_id=target_suite.id,
             start_time=self._current_state.clock,
         )
 
