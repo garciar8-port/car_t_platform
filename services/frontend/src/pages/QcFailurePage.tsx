@@ -1,15 +1,41 @@
 import { useState } from 'react';
 import AppShell from '../components/layout/AppShell';
-import { AlertCircle, ChevronDown, ChevronRight, ExternalLink } from 'lucide-react';
+import { AlertCircle, ChevronDown, ChevronRight, ExternalLink, CheckCircle, Loader2 } from 'lucide-react';
+import { api } from '../services/api';
 
 export default function QcFailurePage() {
   const [showChanges, setShowChanges] = useState(false);
+  const [planState, setPlanState] = useState<'pending' | 'applying' | 'applied' | 'rejected'>('pending');
+  const [notifState, setNotifState] = useState<'idle' | 'sending' | 'sent'>('idle');
   const [notifications, setNotifications] = useState({
     physician: true,
     clinicalSite: true,
     qaTeam: true,
     vpOps: false,
   });
+
+  const handleApplyPlan = async () => {
+    setPlanState('applying');
+    try {
+      await api.applyReschedule('B-1042');
+    } catch { /* demo fallback */ }
+    setPlanState('applied');
+  };
+
+  const handleReject = async () => {
+    try {
+      await api.rejectReschedule('B-1042');
+    } catch { /* demo fallback */ }
+    setPlanState('rejected');
+  };
+
+  const handleSendNotifications = async () => {
+    setNotifState('sending');
+    try {
+      await api.sendNotifications('B-1042', notifications);
+    } catch { /* demo fallback */ }
+    setNotifState('sent');
+  };
 
   return (
     <AppShell>
@@ -124,15 +150,33 @@ export default function QcFailurePage() {
 
             {/* Actions */}
             <div className="flex items-center gap-3 pt-3 border-t border-neutral-100">
-              <button className="bg-primary text-white font-medium py-2.5 px-6 rounded-lg hover:bg-primary/90 transition-colors">
-                Apply re-scheduling plan
-              </button>
-              <button className="border border-neutral-300 text-neutral-700 font-medium py-2.5 px-6 rounded-lg hover:bg-neutral-50 transition-colors">
-                Modify plan
-              </button>
-              <button className="text-sm text-neutral-400 hover:text-primary">
-                Reject and handle manually
-              </button>
+              {planState === 'applied' ? (
+                <div className="flex items-center gap-2 text-success font-medium py-2.5 px-6">
+                  <CheckCircle className="w-5 h-5" />
+                  Re-scheduling plan applied
+                </div>
+              ) : planState === 'rejected' ? (
+                <div className="flex items-center gap-2 text-warning font-medium py-2.5 px-6">
+                  Plan rejected — manual handling required
+                </div>
+              ) : (
+                <>
+                  <button
+                    onClick={handleApplyPlan}
+                    disabled={planState === 'applying'}
+                    className="flex items-center gap-2 bg-primary text-white font-medium py-2.5 px-6 rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-60"
+                  >
+                    {planState === 'applying' && <Loader2 className="w-4 h-4 animate-spin" />}
+                    Apply re-scheduling plan
+                  </button>
+                  <button className="border border-neutral-300 text-neutral-700 font-medium py-2.5 px-6 rounded-lg hover:bg-neutral-50 transition-colors">
+                    Modify plan
+                  </button>
+                  <button onClick={handleReject} className="text-sm text-neutral-400 hover:text-primary">
+                    Reject and handle manually
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -158,8 +202,12 @@ export default function QcFailurePage() {
               </label>
             ))}
           </div>
-          <button className="w-full mt-4 bg-primary text-white text-sm font-medium py-2 rounded-lg hover:bg-primary/90 transition-colors">
-            Send notifications
+          <button
+            onClick={handleSendNotifications}
+            disabled={notifState !== 'idle'}
+            className="w-full mt-4 bg-primary text-white text-sm font-medium py-2 rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-60"
+          >
+            {notifState === 'sending' ? 'Sending...' : notifState === 'sent' ? 'Notifications sent' : 'Send notifications'}
           </button>
         </div>
       </div>

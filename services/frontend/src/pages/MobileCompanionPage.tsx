@@ -1,8 +1,25 @@
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Badge from '../components/ui/Badge';
 import ConfidencePill from '../components/ui/ConfidencePill';
-import { Activity, AlertTriangle } from 'lucide-react';
+import { Activity, AlertTriangle, CheckCircle, Loader2 } from 'lucide-react';
+import { api } from '../services/api';
 
 export default function MobileCompanionPage() {
+  const navigate = useNavigate();
+  const [actionState, setActionState] = useState<'idle' | 'approving' | 'approved' | 'declined'>('idle');
+
+  const handleApprove = async () => {
+    setActionState('approving');
+    try {
+      await api.selectEscalationOption('PT-2493', 'expedite', 'Approved via mobile', 'Maya R.');
+    } catch { /* demo fallback */ }
+    setActionState('approved');
+  };
+
+  const handleDecline = () => {
+    setActionState('declined');
+  };
   return (
     <div className="min-h-screen bg-neutral-100 flex items-center justify-center p-4">
       <div className="w-[375px] bg-white rounded-2xl shadow-lg overflow-hidden border border-neutral-200">
@@ -39,17 +56,39 @@ export default function MobileCompanionPage() {
             </div>
 
             <div className="space-y-2">
-              <button className="w-full bg-primary text-white font-medium py-3 rounded-lg hover:bg-primary/90 transition-colors">
-                Approve recommendation
-              </button>
-              <button className="w-full border border-neutral-300 text-neutral-700 font-medium py-3 rounded-lg hover:bg-neutral-50 transition-colors">
-                Open full details
-              </button>
+              {actionState === 'approved' ? (
+                <div className="w-full flex items-center justify-center gap-2 text-success font-medium py-3">
+                  <CheckCircle className="w-5 h-5" /> Approved
+                </div>
+              ) : actionState === 'declined' ? (
+                <div className="w-full text-center text-warning font-medium py-3">
+                  Declined — team notified
+                </div>
+              ) : (
+                <>
+                  <button
+                    onClick={handleApprove}
+                    disabled={actionState === 'approving'}
+                    className="w-full flex items-center justify-center gap-2 bg-primary text-white font-medium py-3 rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-60"
+                  >
+                    {actionState === 'approving' && <Loader2 className="w-4 h-4 animate-spin" />}
+                    Approve recommendation
+                  </button>
+                  <button
+                    onClick={() => navigate('/coordinator/escalation/PT-2493')}
+                    className="w-full border border-neutral-300 text-neutral-700 font-medium py-3 rounded-lg hover:bg-neutral-50 transition-colors"
+                  >
+                    Open full details
+                  </button>
+                </>
+              )}
             </div>
 
-            <div className="text-center mt-3">
-              <button className="text-sm text-neutral-400 hover:text-primary">Decline and call team</button>
-            </div>
+            {actionState === 'idle' && (
+              <div className="text-center mt-3">
+                <button onClick={handleDecline} className="text-sm text-neutral-400 hover:text-primary">Decline and call team</button>
+              </div>
+            )}
           </div>
 
           {/* Other notifications */}

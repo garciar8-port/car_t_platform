@@ -1,11 +1,37 @@
+import { useState } from 'react';
 import AppShell from '../components/layout/AppShell';
 import Badge from '../components/ui/Badge';
 import ConfidencePill from '../components/ui/ConfidencePill';
 import { escalationPT2493 } from '../data/mock';
-import { Shield } from 'lucide-react';
+import { Shield, CheckCircle, Loader2, X } from 'lucide-react';
+import { api } from '../services/api';
 
 export default function UrgentEscalationPage() {
   const { patient, options, timeline } = escalationPT2493;
+  const [selectedOption, setSelectedOption] = useState<string | null>(null);
+  const [showJustification, setShowJustification] = useState(false);
+  const [justification, setJustification] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [decided, setDecided] = useState(false);
+  const [decidedLabel, setDecidedLabel] = useState('');
+
+  const handleSelectOption = (optId: string) => {
+    setSelectedOption(optId);
+    setShowJustification(true);
+  };
+
+  const handleConfirm = async () => {
+    if (!selectedOption || !justification.trim()) return;
+    setSubmitting(true);
+    const opt = options.find((o) => o.id === selectedOption);
+    try {
+      await api.selectEscalationOption(patient.id, selectedOption, justification);
+    } catch { /* demo fallback */ }
+    setDecidedLabel(opt?.label || '');
+    setDecided(true);
+    setShowJustification(false);
+    setSubmitting(false);
+  };
 
   return (
     <AppShell>
@@ -62,15 +88,24 @@ export default function UrgentEscalationPage() {
                 </div>
               </div>
 
-              <button
-                className={`mt-4 w-full py-2.5 rounded-lg font-medium text-sm transition-colors ${
-                  opt.recommended
-                    ? 'bg-primary text-white hover:bg-primary/90'
-                    : 'border border-neutral-300 text-neutral-700 hover:bg-neutral-50'
-                }`}
-              >
-                Select this option
-              </button>
+              {decided ? (
+                selectedOption === opt.id ? (
+                  <div className="mt-4 w-full py-2.5 rounded-lg font-medium text-sm text-center text-success flex items-center justify-center gap-2">
+                    <CheckCircle className="w-4 h-4" /> Selected
+                  </div>
+                ) : null
+              ) : (
+                <button
+                  onClick={() => handleSelectOption(opt.id)}
+                  className={`mt-4 w-full py-2.5 rounded-lg font-medium text-sm transition-colors ${
+                    opt.recommended
+                      ? 'bg-primary text-white hover:bg-primary/90'
+                      : 'border border-neutral-300 text-neutral-700 hover:bg-neutral-50'
+                  }`}
+                >
+                  Select this option
+                </button>
+              )}
             </div>
           ))}
         </div>
@@ -105,9 +140,48 @@ export default function UrgentEscalationPage() {
       <div className="mt-6 bg-neutral-100 border border-neutral-200 rounded-lg px-4 py-3 flex items-center gap-2">
         <Shield className="w-4 h-4 text-neutral-400" />
         <span className="text-xs text-neutral-500">
-          Decision will be logged with e-signature. You will be required to provide justification for your selection.
+          {decided
+            ? `Decision recorded: ${decidedLabel}. Logged with e-signature.`
+            : 'Decision will be logged with e-signature. You will be required to provide justification for your selection.'}
         </span>
       </div>
+
+      {/* Justification modal */}
+      {showJustification && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-neutral-900">Confirm selection</h3>
+              <button onClick={() => setShowJustification(false)} className="p-1 hover:bg-neutral-100 rounded">
+                <X className="w-4 h-4 text-neutral-400" />
+              </button>
+            </div>
+            <p className="text-sm text-neutral-600 mb-4">
+              You selected: <strong>{options.find((o) => o.id === selectedOption)?.label}</strong>
+            </p>
+            <div className="mb-4">
+              <label className="text-sm font-medium text-neutral-700 mb-2 block">Justification (required for e-signature)</label>
+              <textarea
+                value={justification}
+                onChange={(e) => setJustification(e.target.value)}
+                placeholder="Explain your decision..."
+                className="w-full h-24 text-sm border border-neutral-200 rounded-lg p-3 resize-none focus:outline-none focus:ring-2 focus:ring-primary/20"
+              />
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleConfirm}
+                disabled={!justification.trim() || submitting}
+                className="flex items-center gap-2 bg-primary text-white font-medium py-2.5 px-6 rounded-lg hover:bg-primary/90 disabled:opacity-50"
+              >
+                {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
+                Sign and confirm
+              </button>
+              <button onClick={() => setShowJustification(false)} className="text-sm text-neutral-500">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
     </AppShell>
   );
 }

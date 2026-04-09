@@ -1,23 +1,41 @@
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import AppShell from '../components/layout/AppShell';
 import KpiTile from '../components/ui/KpiTile';
 import Badge from '../components/ui/Badge';
-import { directorKpis, capacityForecastData } from '../data/mock';
+import { directorKpis as mockKpis, capacityForecastData } from '../data/mock';
 import { Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Area, ComposedChart } from 'recharts';
-import { PlayCircle, FileText, Download, Clock } from 'lucide-react';
+import { PlayCircle, FileText, Download, Clock, CheckCircle } from 'lucide-react';
+import { api } from '../services/api';
+import { useApi } from '../hooks/useApi';
 
 export default function DirectorHomePage() {
+  const navigate = useNavigate();
+  const { data: liveKpis } = useApi(() => api.getDirectorKpis(), []);
+  const directorKpis = liveKpis || mockKpis;
+  const [reportGenerated, setReportGenerated] = useState(false);
   return (
     <AppShell currentUser="David M." siteName="Rockville Site A">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-lg font-semibold text-neutral-900">Good morning, David</h1>
         <div className="flex items-center gap-2">
-          <button className="flex items-center gap-1.5 bg-primary text-white text-sm font-medium py-2 px-4 rounded-lg hover:bg-primary/90">
+          <button
+            onClick={() => navigate('/director/capacity')}
+            className="flex items-center gap-1.5 bg-primary text-white text-sm font-medium py-2 px-4 rounded-lg hover:bg-primary/90"
+          >
             <PlayCircle className="w-4 h-4" /> Run capacity forecast
           </button>
-          <button className="flex items-center gap-1.5 border border-neutral-300 text-neutral-700 text-sm font-medium py-2 px-4 rounded-lg hover:bg-neutral-50">
-            <FileText className="w-4 h-4" /> Generate weekly report
+          <button
+            onClick={() => { setReportGenerated(true); setTimeout(() => setReportGenerated(false), 3000); }}
+            className="flex items-center gap-1.5 border border-neutral-300 text-neutral-700 text-sm font-medium py-2 px-4 rounded-lg hover:bg-neutral-50"
+          >
+            {reportGenerated ? <CheckCircle className="w-4 h-4 text-success" /> : <FileText className="w-4 h-4" />}
+            {reportGenerated ? 'Report generated' : 'Generate weekly report'}
           </button>
-          <button className="flex items-center gap-1.5 border border-neutral-300 text-neutral-700 text-sm font-medium py-2 px-4 rounded-lg hover:bg-neutral-50">
+          <button
+            onClick={() => alert('PDF export coming soon')}
+            className="flex items-center gap-1.5 border border-neutral-300 text-neutral-700 text-sm font-medium py-2 px-4 rounded-lg hover:bg-neutral-50"
+          >
             <Download className="w-4 h-4" /> Export to PDF
           </button>
         </div>
@@ -115,7 +133,7 @@ export default function DirectorHomePage() {
               <Clock className="w-3 h-3" />
               Closed at 7:14am
             </div>
-            <button className="text-xs text-primary hover:underline">View details</button>
+            <button onClick={() => navigate('/coordinator/qc-failure/B-1042')} className="text-xs text-primary hover:underline">View details</button>
           </div>
         </div>
       </section>

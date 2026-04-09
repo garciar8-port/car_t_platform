@@ -2,7 +2,8 @@ import { useState } from 'react';
 import AppShell from '../components/layout/AppShell';
 import { throughputSimData } from '../data/mock';
 import { ComposedChart, Line, Area, XAxis, YAxis, CartesianGrid, ResponsiveContainer, BarChart, Bar } from 'recharts';
-import { PlayCircle, Save, GitCompare, Download, Loader2 } from 'lucide-react';
+import { PlayCircle, Save, GitCompare, Download, Loader2, CheckCircle } from 'lucide-react';
+import { api } from '../services/api';
 
 const bottleneckData = [
   { name: 'Suite capacity', value: 40 },
@@ -18,10 +19,19 @@ export default function CapacityPlanningPage() {
   const [expansionDuration, setExpansionDuration] = useState(14);
   const [timeHorizon, setTimeHorizon] = useState(30);
   const [state, setState] = useState<'idle' | 'running' | 'done'>('idle');
+  const [saved, setSaved] = useState(false);
 
-  const handleRun = () => {
+  const handleRun = async () => {
     setState('running');
-    setTimeout(() => setState('done'), 2000);
+    try {
+      await api.runCapacitySimulation({ suiteCount, arrivalRate, qcFailRate, expansionDuration, timeHorizon });
+    } catch { /* fall through to show mock results */ }
+    setState('done');
+  };
+
+  const handleSave = () => {
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
   };
 
   return (
@@ -179,13 +189,14 @@ export default function CapacityPlanningPage() {
 
               {/* Bottom actions */}
               <div className="flex items-center gap-3">
-                <button className="flex items-center gap-1.5 border border-neutral-300 text-neutral-700 text-sm font-medium py-2 px-4 rounded-lg hover:bg-neutral-50">
-                  <Save className="w-4 h-4" /> Save scenario
+                <button onClick={handleSave} className="flex items-center gap-1.5 border border-neutral-300 text-neutral-700 text-sm font-medium py-2 px-4 rounded-lg hover:bg-neutral-50">
+                  {saved ? <CheckCircle className="w-4 h-4 text-success" /> : <Save className="w-4 h-4" />}
+                  {saved ? 'Saved!' : 'Save scenario'}
                 </button>
-                <button className="flex items-center gap-1.5 border border-neutral-300 text-neutral-700 text-sm font-medium py-2 px-4 rounded-lg hover:bg-neutral-50">
+                <button onClick={() => alert('Compare view coming soon')} className="flex items-center gap-1.5 border border-neutral-300 text-neutral-700 text-sm font-medium py-2 px-4 rounded-lg hover:bg-neutral-50">
                   <GitCompare className="w-4 h-4" /> Compare scenarios
                 </button>
-                <button className="flex items-center gap-1.5 border border-neutral-300 text-neutral-700 text-sm font-medium py-2 px-4 rounded-lg hover:bg-neutral-50">
+                <button onClick={() => alert('Export coming soon')} className="flex items-center gap-1.5 border border-neutral-300 text-neutral-700 text-sm font-medium py-2 px-4 rounded-lg hover:bg-neutral-50">
                   <Download className="w-4 h-4" /> Export to slides
                 </button>
               </div>

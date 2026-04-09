@@ -1,12 +1,35 @@
 import { useState } from 'react';
 import AppShell from '../components/layout/AppShell';
 import { handoffSections } from '../data/mock';
-import { ChevronDown, ChevronRight, FileSignature } from 'lucide-react';
+import { ChevronDown, ChevronRight, FileSignature, CheckCircle, Loader2 } from 'lucide-react';
+import { api } from '../services/api';
 
 export default function HandoffPage() {
   const [expanded, setExpanded] = useState<Record<number, boolean>>({ 0: true, 1: true, 2: true, 3: true });
   const [notes, setNotes] = useState('');
   const [sections] = useState(handoffSections);
+  const [checkedItems, setCheckedItems] = useState<Record<string, boolean>>({});
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'draft' | 'signed'>('idle');
+
+  const handleCheckItem = (sectionIdx: number, itemIdx: number, checked: boolean) => {
+    setCheckedItems((prev) => ({ ...prev, [`${sectionIdx}-${itemIdx}`]: checked }));
+  };
+
+  const handleSaveDraft = async () => {
+    setSaveState('saving');
+    try {
+      await api.saveHandoff({ notes, checkedItems, signed: false });
+    } catch { /* demo fallback */ }
+    setSaveState('draft');
+  };
+
+  const handleSaveAndSign = async () => {
+    setSaveState('saving');
+    try {
+      await api.saveHandoff({ notes, checkedItems, signed: true });
+    } catch { /* demo fallback */ }
+    setSaveState('signed');
+  };
 
   const toggleSection = (i: number) => {
     setExpanded((prev) => ({ ...prev, [i]: !prev[i] }));
@@ -76,7 +99,12 @@ export default function HandoffPage() {
                         <ul className="space-y-2">
                           {section.items.map((item, j) => (
                             <li key={j} className="flex items-start gap-2">
-                              <input type="checkbox" defaultChecked={false} className="mt-0.5 rounded border-neutral-300 text-primary focus:ring-primary/20" />
+                              <input
+                                type="checkbox"
+                                checked={checkedItems[`${i}-${j}`] || false}
+                                onChange={(e) => handleCheckItem(i, j, e.target.checked)}
+                                className="mt-0.5 rounded border-neutral-300 text-primary focus:ring-primary/20"
+                              />
                               <span className="text-sm text-neutral-600">{item}</span>
                             </li>
                           ))}
@@ -112,10 +140,36 @@ export default function HandoffPage() {
           Handoff will be signed with your e-signature and timestamped
         </div>
         <div className="flex items-center gap-3">
-          <button className="text-sm text-neutral-500 hover:text-primary">Save as draft</button>
-          <button className="bg-primary text-white text-sm font-medium py-2 px-5 rounded-lg hover:bg-primary/90 transition-colors">
-            Save and sign
-          </button>
+          {saveState === 'signed' ? (
+            <div className="flex items-center gap-2 text-success font-medium text-sm">
+              <CheckCircle className="w-4 h-4" />
+              Signed and submitted
+            </div>
+          ) : saveState === 'draft' ? (
+            <>
+              <div className="text-sm text-success font-medium">Draft saved</div>
+              <button
+                onClick={handleSaveAndSign}
+                className="bg-primary text-white text-sm font-medium py-2 px-5 rounded-lg hover:bg-primary/90 transition-colors"
+              >
+                Save and sign
+              </button>
+            </>
+          ) : (
+            <>
+              <button onClick={handleSaveDraft} disabled={saveState === 'saving'} className="text-sm text-neutral-500 hover:text-primary disabled:opacity-50">
+                {saveState === 'saving' ? 'Saving...' : 'Save as draft'}
+              </button>
+              <button
+                onClick={handleSaveAndSign}
+                disabled={saveState === 'saving'}
+                className="flex items-center gap-2 bg-primary text-white text-sm font-medium py-2 px-5 rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-60"
+              >
+                {saveState === 'saving' && <Loader2 className="w-4 h-4 animate-spin" />}
+                Save and sign
+              </button>
+            </>
+          )}
         </div>
       </div>
     </AppShell>

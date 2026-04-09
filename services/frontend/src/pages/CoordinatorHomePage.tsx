@@ -2,9 +2,11 @@ import { useState } from 'react';
 import AppShell from '../components/layout/AppShell';
 import ActionCard from '../components/ui/ActionCard';
 import KpiTile from '../components/ui/KpiTile';
-import { actionCards, batches, coordinatorKpis, suites } from '../data/mock';
-import { RefreshCw, Filter } from 'lucide-react';
+import { actionCards as mockActionCards, batches as mockBatches, coordinatorKpis as mockKpis, suites as mockSuites } from '../data/mock';
+import { RefreshCw, Filter, Loader2 } from 'lucide-react';
 import type { BatchStatus } from '../types';
+import { api } from '../services/api';
+import { useApi } from '../hooks/useApi';
 
 const batchStatusColors: Record<BatchStatus, string> = {
   in_progress: 'bg-accent text-white',
@@ -19,7 +21,27 @@ type ViewRange = '24h' | '48h' | '7d';
 export default function CoordinatorHomePage() {
   const [viewRange, setViewRange] = useState<ViewRange>('24h');
   const totalHours = viewRange === '24h' ? 24 : viewRange === '48h' ? 48 : 168;
-  const currentHour = 8; // 8am
+  const currentHour = new Date().getHours();
+
+  const { data: liveSuites, refetch: refetchSuites } = useApi(() => api.getSuites(), []);
+  const { data: liveBatches, refetch: refetchBatches } = useApi(() => api.getBatches(), []);
+  const { data: liveKpis } = useApi(() => api.getCoordinatorKpis(), []);
+  const { data: liveCards } = useApi(() => api.getActionCards(), []);
+  const { data: healthData } = useApi(() => api.health(), []);
+
+  // Use live data if available, fall back to mock
+  const suites = liveSuites || mockSuites;
+  const batches = liveBatches || mockBatches;
+  const coordinatorKpis = liveKpis || mockKpis;
+  const actionCards = liveCards || mockActionCards;
+  const isLive = liveSuites !== null;
+
+  const handleRefresh = () => {
+    api.stepSimulation().then(() => {
+      refetchSuites();
+      refetchBatches();
+    });
+  };
 
   return (
     <AppShell>
@@ -59,7 +81,11 @@ export default function CoordinatorHomePage() {
               <button className="p-1.5 text-neutral-400 hover:text-neutral-600 hover:bg-neutral-100 rounded">
                 <Filter className="w-3.5 h-3.5" />
               </button>
-              <button className="flex items-center gap-1 text-xs text-neutral-400 hover:text-neutral-600 p-1.5 hover:bg-neutral-100 rounded">
+              <button
+                onClick={handleRefresh}
+                className="flex items-center gap-1 text-xs text-neutral-400 hover:text-neutral-600 p-1.5 hover:bg-neutral-100 rounded"
+                title="Advance simulation"
+              >
                 <RefreshCw className="w-3.5 h-3.5" />
               </button>
             </div>
@@ -137,10 +163,14 @@ export default function CoordinatorHomePage() {
             <div className="bg-white border border-neutral-200 rounded-lg p-3 mt-1">
               <div className="text-[10px] font-medium text-neutral-400 uppercase tracking-wide mb-2">System status</div>
               <div className="flex items-center gap-1.5 mb-1">
-                <span className="w-1.5 h-1.5 bg-success rounded-full" />
-                <span className="text-xs text-neutral-600">Model v2.3.1</span>
+                <span className={`w-1.5 h-1.5 rounded-full ${isLive ? 'bg-success' : 'bg-warning'}`} />
+                <span className="text-xs text-neutral-600">
+                  {healthData?.model_version || 'Model v0.4.0'}
+                </span>
               </div>
-              <div className="text-[10px] text-neutral-400">Trained 2 weeks ago · Avg confidence 87%</div>
+              <div className="text-[10px] text-neutral-400">
+                {isLive ? 'Connected to scheduler' : 'Using mock data'} · {healthData?.model_loaded ? 'PPO model loaded' : 'No model'}
+              </div>
             </div>
           </div>
         </div>

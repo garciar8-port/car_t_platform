@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import AppShell from '../components/layout/AppShell';
 import Badge from '../components/ui/Badge';
-import { auditEntries } from '../data/mock';
+import { auditEntries as mockAuditEntries } from '../data/mock';
 import { Search, Filter, ChevronDown, CheckCircle, Clock, Minus } from 'lucide-react';
 import type { AuditEntry } from '../types';
+import { api } from '../services/api';
+import { useApi } from '../hooks/useApi';
 
 const actionColors: Record<string, 'success' | 'warning' | 'danger' | 'info' | 'neutral'> = {
   approve: 'success',
@@ -22,12 +24,31 @@ export default function AuditTrailPage() {
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
   const [searchPatient, setSearchPatient] = useState('');
   const [searchBatch, setSearchBatch] = useState('');
+  const [dateFrom, setDateFrom] = useState('2026-04-01');
+  const [dateTo, setDateTo] = useState('2026-04-06');
+  const [userFilter, setUserFilter] = useState('all');
+  const [actionFilter, setActionFilter] = useState('all');
+
+  const { data: liveAudit } = useApi(() => api.getAuditTrail(), []);
+  // Merge live audit entries (from approvals) with mock entries for demo richness
+  const auditEntries = [...(liveAudit || []), ...mockAuditEntries];
 
   const filtered = auditEntries.filter((e) => {
     if (searchPatient && !e.subject.toLowerCase().includes(searchPatient.toLowerCase())) return false;
     if (searchBatch && !e.subject.toLowerCase().includes(searchBatch.toLowerCase())) return false;
+    if (userFilter !== 'all' && e.user !== userFilter) return false;
+    if (actionFilter !== 'all' && e.actionType !== actionFilter) return false;
     return true;
   });
+
+  const clearFilters = () => {
+    setSearchPatient('');
+    setSearchBatch('');
+    setDateFrom('2026-04-01');
+    setDateTo('2026-04-06');
+    setUserFilter('all');
+    setActionFilter('all');
+  };
 
   const renderRow = (entry: AuditEntry) => {
     const isExpanded = expandedRow === entry.id;
@@ -86,27 +107,27 @@ export default function AuditTrailPage() {
           <div className="bg-white border border-neutral-200 rounded-lg px-4 py-3 flex items-center gap-3 mb-4 flex-wrap">
             <div className="flex items-center gap-1.5 border border-neutral-200 rounded-lg px-3 py-1.5">
               <span className="text-xs text-neutral-400">From:</span>
-              <input type="date" defaultValue="2026-04-01" className="text-xs text-neutral-700 border-none focus:outline-none" />
+              <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="text-xs text-neutral-700 border-none focus:outline-none" />
               <span className="text-xs text-neutral-400">To:</span>
-              <input type="date" defaultValue="2026-04-06" className="text-xs text-neutral-700 border-none focus:outline-none" />
+              <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="text-xs text-neutral-700 border-none focus:outline-none" />
             </div>
             <div className="flex items-center gap-1.5 border border-neutral-200 rounded-lg px-3 py-1.5">
               <Filter className="w-3 h-3 text-neutral-400" />
-              <select className="text-xs text-neutral-700 border-none focus:outline-none bg-transparent">
-                <option>All users</option>
-                <option>Maya R.</option>
-                <option>Sarah K.</option>
-                <option>David M.</option>
+              <select value={userFilter} onChange={(e) => setUserFilter(e.target.value)} className="text-xs text-neutral-700 border-none focus:outline-none bg-transparent">
+                <option value="all">All users</option>
+                <option value="Maya R.">Maya R.</option>
+                <option value="Sarah K.">Sarah K.</option>
+                <option value="David M.">David M.</option>
               </select>
             </div>
             <div className="flex items-center gap-1.5 border border-neutral-200 rounded-lg px-3 py-1.5">
               <ChevronDown className="w-3 h-3 text-neutral-400" />
-              <select className="text-xs text-neutral-700 border-none focus:outline-none bg-transparent">
-                <option>All actions</option>
-                <option>approve</option>
-                <option>override</option>
-                <option>preempt</option>
-                <option>model_deploy</option>
+              <select value={actionFilter} onChange={(e) => setActionFilter(e.target.value)} className="text-xs text-neutral-700 border-none focus:outline-none bg-transparent">
+                <option value="all">All actions</option>
+                <option value="approve">approve</option>
+                <option value="override">override</option>
+                <option value="preempt">preempt</option>
+                <option value="model_deploy">model_deploy</option>
               </select>
             </div>
             <div className="flex items-center gap-1.5 border border-neutral-200 rounded-lg px-3 py-1.5">
@@ -129,7 +150,7 @@ export default function AuditTrailPage() {
                 className="text-xs text-neutral-700 border-none focus:outline-none w-20"
               />
             </div>
-            <button className="text-xs text-neutral-400 hover:text-primary">Clear</button>
+            <button onClick={clearFilters} className="text-xs text-neutral-400 hover:text-primary">Clear</button>
           </div>
 
           {/* Table */}
