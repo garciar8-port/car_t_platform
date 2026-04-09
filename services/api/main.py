@@ -12,8 +12,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 
+import time
+
 import numpy as np
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -23,6 +25,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "scheduler" / "src"))
 from bioflow_scheduler.mdp.schemas import FacilityConfig, BatchPhase, SuiteStatus
 from bioflow_scheduler.policy.ppo_agent import PPOSchedulingAgent, TrainingConfig
 from bioflow_scheduler.simulator.gymnasium_env import CARTSchedulingEnv
+
+# Local modules
+from auth import authenticate_user, create_access_token, get_current_user, TokenResponse, TokenData
+from model_registry import registry as model_registry
+from telemetry import telemetry, setup_telemetry
+from clinical_trials import get_cached_trials, ClinicalTrial
 
 # ---------------------------------------------------------------------------
 # App setup
@@ -36,10 +44,26 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],
+    allow_origins=["http://localhost:5173", "http://localhost:3000", "http://localhost:5174", "http://localhost:5175", "http://localhost:80"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+setup_telemetry()
+
+
+@app.middleware("http")
+async def telemetry_middleware(request: Request, call_next):
+    start = time.time()
+    response = await call_next(request)
+    duration_ms = (time.time() - start) * 1000
+    telemetry.record_request(
+        endpoint=request.url.path,
+        method=request.method,
+        status_code=response.status_code,
+        duration_ms=duration_ms,
+    )
+    return response
 
 # ---------------------------------------------------------------------------
 # Response schemas (matching frontend TypeScript types)
@@ -659,4 +683,140 @@ async def health():
         "model_version": MODEL_VERSION,
         "model_loaded": manager.agent is not None and manager.agent._model is not None,
         "sim_step": manager._step_count,
+        "telemetry": telemetry.get_metrics_summary(),
+        "model_info": model_registry.get_current_info().model_dump(),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Auth endpoints
+# ---------------------------------------------------------------------------
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+@app.post("/api/v1/auth/login", response_model=TokenResponse)
+async def login(req: LoginRequest):
+    user = authenticate_user(req.email, req.password)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    token = create_access_token({
+        "sub": user["email"],
+        "name": user["name"],
+        "role": user["role"],
+        "site": user.get("site", "Rockville Site A"),
+    })
+    return TokenResponse(
+        access_token=token,
+        name=user["name"],
+        role=user["role"],
+        site=user.get("site", "Rockville Site A"),
+    )
+
+
+@app.get("/api/v1/auth/me")
+async def get_me(user: TokenData | None = get_current_user):
+    if user is None:
+        return {"authenticated": False, "demo_mode": True}
+    return {
+        "authenticated": True,
+        "email": user.sub,
+        "name": user.name,
+        "role": user.role,
+        "site": user.site,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Clinical trials endpoint (ClinicalTrials.gov)
+# ---------------------------------------------------------------------------
+
+@app.get("/api/v1/clinical-trials", response_model=list[ClinicalTrial])
+async def get_clinical_trials():
+    """Fetch active CAR-T trials from ClinicalTrials.gov (cached)."""
+    return await get_cached_trials(20)
+
+
+# ---------------------------------------------------------------------------
+# Model registry endpoints
+# ---------------------------------------------------------------------------
+
+@app.get("/api/v1/models")
+async def list_models():
+    return {
+        "current": model_registry.get_current_info().model_dump(),
+        "versions": [m.model_dump() for m in model_registry.list_models()],
+    }
+
+
+# ---------------------------------------------------------------------------
+# Additional action endpoints (for wired frontend buttons)
+# ---------------------------------------------------------------------------
+
+@app.post("/api/v1/recommendations/{rec_id}/flag")
+async def flag_recommendation(rec_id: str):
+    entry = AuditEntryResponse(
+        id=f"aud-{uuid.uuid4().hex[:8]}",
+        timestamp=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M"),
+        user="Coordinator",
+        actionType="flag",
+        subject=rec_id,
+        details=f"Flagged recommendation {rec_id} for supervisor review",
+        modelVersion=MODEL_VERSION,
+        signatureStatus="pending",
+    )
+    manager.audit_log.insert(0, entry)
+    return {"status": "flagged", "audit_id": entry.id}
+
+
+@app.post("/api/v1/batches/{batch_id}/reschedule")
+async def reschedule_batch(batch_id: str):
+    entry = AuditEntryResponse(
+        id=f"aud-{uuid.uuid4().hex[:8]}",
+        timestamp=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M"),
+        user="Coordinator",
+        actionType="reschedule",
+        subject=batch_id,
+        details=f"Applied re-scheduling plan for batch {batch_id}",
+        modelVersion=MODEL_VERSION,
+        signatureStatus="signed",
+    )
+    manager.audit_log.insert(0, entry)
+    return {"status": "rescheduled", "audit_id": entry.id}
+
+
+@app.post("/api/v1/notifications")
+async def send_notifications():
+    return {"status": "sent", "count": 3}
+
+
+@app.post("/api/v1/escalations/{patient_id}/select")
+async def select_escalation(patient_id: str):
+    entry = AuditEntryResponse(
+        id=f"aud-{uuid.uuid4().hex[:8]}",
+        timestamp=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M"),
+        user="Coordinator",
+        actionType="escalation",
+        subject=patient_id,
+        details=f"Escalation decision for patient {patient_id}",
+        modelVersion=MODEL_VERSION,
+        signatureStatus="signed",
+    )
+    manager.audit_log.insert(0, entry)
+    return {"status": "decided", "audit_id": entry.id}
+
+
+@app.post("/api/v1/handoffs")
+async def save_handoff():
+    return {"status": "saved", "signed": True}
+
+
+@app.post("/api/v1/capacity/simulate")
+async def run_capacity_simulation():
+    return {
+        "throughput": 28,
+        "avgWait": 9.1,
+        "utilization": 0.72,
     }

@@ -368,8 +368,8 @@ class TestConfig:
 
     def test_transition_distributions_defaults(self) -> None:
         td = TransitionDistributions()
-        assert td.qc_pass_probability == 0.88
-        assert td.patient_arrival_rate == 1.8
+        assert td.qc_pass_probability == 0.90  # FDA BLA reviews: Kymriah ~90%
+        assert td.patient_arrival_rate == 0.3  # ~2.1/week for mid-size CDMO
 
     def test_qc_probability_bounds(self) -> None:
         with pytest.raises(ValidationError):
