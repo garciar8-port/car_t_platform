@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 from jose import JWTError, jwt
-from passlib.context import CryptContext
+import bcrypt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel
@@ -11,8 +11,11 @@ SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-key-change-in-production")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 480  # 8 hour shift
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
+
+
+def _hash_pw(password: str) -> str:
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
 
 class TokenData(BaseModel):
@@ -37,25 +40,25 @@ DEMO_USERS = {
         "name": "Maya R.",
         "role": "coordinator",
         "site": "Rockville Site A",
-        "hashed_password": pwd_context.hash("demo123"),
+        "hashed_password": _hash_pw("demo123"),
     },
     "david@bioflow.io": {
         "name": "David M.",
         "role": "director",
         "site": "Rockville Site A",
-        "hashed_password": pwd_context.hash("demo123"),
+        "hashed_password": _hash_pw("demo123"),
     },
     "sarah@bioflow.io": {
         "name": "Sarah K.",
         "role": "qa_reviewer",
         "site": "Rockville Site A",
-        "hashed_password": pwd_context.hash("demo123"),
+        "hashed_password": _hash_pw("demo123"),
     },
 }
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+    return bcrypt.checkpw(plain_password.encode(), hashed_password.encode())
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:

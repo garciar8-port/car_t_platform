@@ -30,7 +30,6 @@ from bioflow_scheduler.simulator.gymnasium_env import CARTSchedulingEnv
 from auth import authenticate_user, create_access_token, get_current_user, TokenResponse, TokenData
 from model_registry import registry as model_registry
 from telemetry import telemetry, setup_telemetry
-from clinical_trials import get_cached_trials, ClinicalTrial
 
 # ---------------------------------------------------------------------------
 # App setup
@@ -303,17 +302,25 @@ class SimulatorManager:
             if batch.completed:
                 continue
             phase_label = batch.current_phase.value.capitalize()
+            # Show batch position within 24h view based on start time
             start_hour = int(batch.start_time % 24)
-            duration = int(sim._estimate_days_remaining(batch) * 24)
+            # Use current phase duration (not total remaining) for Gantt bar width
+            phase_durations = {
+                "isolation": 24, "activation": 48, "transduction": 36,
+                "expansion": 216, "harvest": 24, "formulation": 36, "qc": 168,
+            }
+            phase_hours = phase_durations.get(batch.current_phase.value, 24)
+            # For 24h view, cap duration so bars are visible
+            display_duration = min(phase_hours, 8)
 
             batches.append(BatchResponse(
                 id=batch.batch_id,
                 patientId=batch.patient_id,
-                suiteId=batch.suite_id.replace("SUITE-", "S"),
+                suiteId=batch.suite_id,
                 phase=phase_label,
                 status="in_progress" if not batch.failed else "at_risk",
                 startHour=start_hour,
-                durationHours=max(duration, 1),
+                durationHours=max(display_duration, 2),
             ))
         return batches
 
@@ -386,7 +393,7 @@ class SimulatorManager:
         alternatives = []
         for alt_suite in idle_suites[1:3]:
             alternatives.append(AlternativeResponse(
-                suiteId=alt_suite.id.replace("SUITE-", "S"),
+                suiteId=alt_suite.id,
                 suiteName=alt_suite.id.replace("SUITE-", "Suite "),
                 startTime="Next shift",
                 confidence=max(55, confidence - 10 - len(alternatives) * 5),
@@ -396,7 +403,7 @@ class SimulatorManager:
         return RecommendationResponse(
             id=f"rec-{uuid.uuid4().hex[:8]}",
             patientId=patient_id,
-            recommendedSuiteId=recommended_suite.id.replace("SUITE-", "S"),
+            recommendedSuiteId=recommended_suite.id,
             recommendedSuiteName=recommended_suite.id.replace("SUITE-", "Suite "),
             recommendedStartTime="In 4 hours",
             confidence=confidence,
@@ -499,7 +506,7 @@ class SimulatorManager:
 
         cards: list[ActionCardResponse] = []
 
-        # Urgent patients
+        # Urgent patients (acuity > 0.7)
         for p in state.patient_queue:
             if p.acuity_score > 0.7:
                 cards.append(ActionCardResponse(
@@ -511,19 +518,80 @@ class SimulatorManager:
                     link=f"/coordinator/assignment/{p.patient_id}",
                 ))
 
-        # Idle suites
+        # Patients waiting > 5 days
+        for p in state.patient_queue:
+            if p.days_waiting > 5 and p.acuity_score <= 0.7:
+                cards.append(ActionCardResponse(
+                    id=f"ac-wait-{p.patient_id}",
+                    type="attention",
+                    description=f"Patient {p.patient_id} has been waiting {p.days_waiting} days — approaching target window",
+                    timeSinceFlag=f"{p.days_waiting}d",
+                    action="Review",
+                    link=f"/coordinator/assignment/{p.patient_id}",
+                ))
+
+        # Suites in QC phase (results pending)
+        from bioflow_scheduler.mdp import BatchPhase, SuiteStatus
+        for s in state.suites:
+            if s.status == SuiteStatus.IN_USE and s.current_phase == BatchPhase.QC:
+                cards.append(ActionCardResponse(
+                    id=f"ac-qc-{s.id}",
+                    type="attention",
+                    description=f"QC results pending for batch {s.current_batch_id} in {s.id} — est. {s.days_remaining_estimate:.0f}d remaining",
+                    timeSinceFlag="In progress",
+                    action="View",
+                    link=f"/coordinator/qc-failure/{s.current_batch_id}",
+                ))
+
+        # Suites in cleaning
+        cleaning = [s for s in state.suites if s.status == SuiteStatus.CLEANING]
+        if cleaning:
+            cards.append(ActionCardResponse(
+                id="ac-cleaning",
+                type="info",
+                description=f"{len(cleaning)} suite{'s' if len(cleaning) > 1 else ''} in cleaning cycle — will be available soon",
+                timeSinceFlag="Now",
+                action="View",
+                link="/coordinator/assignment",
+            ))
+
+        # Suites in maintenance
+        maint = [s for s in state.suites if s.status == SuiteStatus.MAINTENANCE]
+        if maint:
+            cards.append(ActionCardResponse(
+                id="ac-maint",
+                type="info",
+                description=f"{len(maint)} suite{'s' if len(maint) > 1 else ''} under maintenance — check completion schedule",
+                timeSinceFlag="Ongoing",
+                action="View",
+                link="/coordinator/assignment",
+            ))
+
+        # Idle suites with waiting patients
         idle = state.idle_suites
         if idle and state.patient_queue:
             cards.append(ActionCardResponse(
                 id="ac-idle",
                 type="info",
-                description=f"{len(idle)} suite{'s' if len(idle) > 1 else ''} idle — {len(state.patient_queue)} patients waiting",
+                description=f"{len(idle)} suite{'s' if len(idle) > 1 else ''} idle — {len(state.patient_queue)} patient{'s' if len(state.patient_queue) > 1 else ''} waiting",
                 timeSinceFlag="Now",
                 action="Assign",
-                link=f"/coordinator/assignment/{state.patient_queue[0].patient_id}",
+                link="/coordinator/assignment",
             ))
 
-        return cards[:6]  # Cap at 6
+        # Low cell viability warning
+        for p in state.patient_queue:
+            if p.cell_viability_days_remaining is not None and p.cell_viability_days_remaining <= 5:
+                cards.append(ActionCardResponse(
+                    id=f"ac-viab-{p.patient_id}",
+                    type="urgent",
+                    description=f"Cell viability for {p.patient_id} expires in {p.cell_viability_days_remaining}d — prioritize assignment",
+                    timeSinceFlag="Critical",
+                    action="Assign",
+                    link=f"/coordinator/assignment/{p.patient_id}",
+                ))
+
+        return cards[:8]  # Cap at 8
 
     def _get_patient_details(self, patient_id: str, patient) -> dict:
         """Generate or retrieve enriched patient details for display."""
@@ -727,16 +795,6 @@ async def get_me(user: TokenData | None = get_current_user):
         "role": user.role,
         "site": user.site,
     }
-
-
-# ---------------------------------------------------------------------------
-# Clinical trials endpoint (ClinicalTrials.gov)
-# ---------------------------------------------------------------------------
-
-@app.get("/api/v1/clinical-trials", response_model=list[ClinicalTrial])
-async def get_clinical_trials():
-    """Fetch active CAR-T trials from ClinicalTrials.gov (cached)."""
-    return await get_cached_trials(20)
 
 
 # ---------------------------------------------------------------------------

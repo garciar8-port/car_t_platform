@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import AccessGatePage from './pages/AccessGatePage';
 import LoginPage from './pages/LoginPage';
 import CoordinatorHomePage from './pages/CoordinatorHomePage';
 import PatientAssignmentPage from './pages/PatientAssignmentPage';
@@ -9,13 +11,23 @@ import DirectorHomePage from './pages/DirectorHomePage';
 import CapacityPlanningPage from './pages/CapacityPlanningPage';
 import AuditTrailPage from './pages/AuditTrailPage';
 import MobileCompanionPage from './pages/MobileCompanionPage';
+import PatientQueuePage from './pages/PatientQueuePage';
 
 export default function App() {
+  const [authenticated, setAuthenticated] = useState(
+    () => sessionStorage.getItem('demo_authenticated') === 'true'
+  );
+
+  if (!authenticated) {
+    return <AccessGatePage onAuthenticated={() => setAuthenticated(true)} />;
+  }
+
   return (
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<LoginPage />} />
         <Route path="/coordinator" element={<CoordinatorHomePage />} />
+        <Route path="/coordinator/assignment" element={<PatientQueuePage />} />
         <Route path="/coordinator/assignment/:patientId" element={<PatientAssignmentPage />} />
         <Route path="/coordinator/qc-failure/:batchId" element={<QcFailurePage />} />
         <Route path="/coordinator/escalation/:patientId" element={<UrgentEscalationPage />} />

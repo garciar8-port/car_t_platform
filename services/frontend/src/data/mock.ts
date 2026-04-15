@@ -43,6 +43,38 @@ export const actionCards: ActionCardData[] = [
     description: 'Shift handoff note from Sarah (night shift)',
     timeSinceFlag: '1h ago',
     action: 'Read',
+    link: '/coordinator/handoff',
+  },
+  {
+    id: 'ac5',
+    type: 'urgent',
+    description: 'Patient PT-2493 acuity escalated to 0.94 — physician requests expedited slot',
+    timeSinceFlag: '30m ago',
+    action: 'Escalate',
+    link: '/coordinator/escalation/PT-2493',
+  },
+  {
+    id: 'ac6',
+    type: 'attention',
+    description: 'Cell viability for PT-2471 expires in 4 days — prioritize assignment',
+    timeSinceFlag: '3h ago',
+    action: 'Assign',
+    link: '/coordinator/assignment/PT-2471',
+  },
+  {
+    id: 'ac7',
+    type: 'info',
+    description: '3 suites idle — 5 patients awaiting assignment',
+    timeSinceFlag: 'Now',
+    action: 'Assign',
+    link: '/coordinator/assignment',
+  },
+  {
+    id: 'ac8',
+    type: 'attention',
+    description: 'Suite 6 maintenance overdue — ventilation check pending since yesterday',
+    timeSinceFlag: '1d ago',
+    action: 'View',
     link: '#',
   },
 ];
@@ -210,6 +242,57 @@ export const handoffSections: HandoffSection[] = [
     title: 'Optional notes',
     content: '',
     editable: true,
+  },
+];
+
+export const patients: Patient[] = [
+  {
+    id: 'PT-2487', name: 'Patient PT-2487', indication: 'DLBCL', acuityScore: 0.72,
+    enrollmentDate: '2026-03-28', apheresisDate: '2026-04-08',
+    targetInfusionWindow: { start: '2026-04-22', end: '2026-04-26' },
+    treatmentCenter: 'Memorial Sloan Kettering', status: 'awaiting_assignment', isUrgent: true,
+  },
+  {
+    id: 'PT-2493', name: 'Patient PT-2493', indication: 'ALL', acuityScore: 0.94,
+    enrollmentDate: '2026-04-01', apheresisDate: '2026-04-03',
+    targetInfusionWindow: { start: '2026-04-10', end: '2026-04-14' },
+    treatmentCenter: 'MSKCC', status: 'awaiting_assignment', isUrgent: true,
+  },
+  {
+    id: 'PT-2401', name: 'Patient PT-2401', indication: 'DLBCL', acuityScore: 0.58,
+    enrollmentDate: '2026-03-15', apheresisDate: '2026-03-20',
+    targetInfusionWindow: { start: '2026-04-08', end: '2026-04-12' },
+    treatmentCenter: 'MD Anderson', status: 'in_progress', isUrgent: false,
+  },
+  {
+    id: 'PT-2456', name: 'Patient PT-2456', indication: 'MCL', acuityScore: 0.45,
+    enrollmentDate: '2026-03-22', apheresisDate: '2026-03-28',
+    targetInfusionWindow: { start: '2026-04-14', end: '2026-04-18' },
+    treatmentCenter: 'Dana-Farber', status: 'in_progress', isUrgent: false,
+  },
+  {
+    id: 'PT-2471', name: 'Patient PT-2471', indication: 'ALL', acuityScore: 0.81,
+    enrollmentDate: '2026-03-25', apheresisDate: '2026-04-01',
+    targetInfusionWindow: { start: '2026-04-12', end: '2026-04-16' },
+    treatmentCenter: 'Fred Hutchinson', status: 'in_progress', isUrgent: true,
+  },
+  {
+    id: 'PT-2478', name: 'Patient PT-2478', indication: 'DLBCL', acuityScore: 0.33,
+    enrollmentDate: '2026-03-30', apheresisDate: '2026-04-05',
+    targetInfusionWindow: { start: '2026-04-18', end: '2026-04-22' },
+    treatmentCenter: 'City of Hope', status: 'awaiting_assignment', isUrgent: false,
+  },
+  {
+    id: 'PT-2489', name: 'Patient PT-2489', indication: 'FL', acuityScore: 0.27,
+    enrollmentDate: '2026-04-02', apheresisDate: '2026-04-07',
+    targetInfusionWindow: { start: '2026-04-20', end: '2026-04-24' },
+    treatmentCenter: 'Mayo Clinic', status: 'awaiting_assignment', isUrgent: false,
+  },
+  {
+    id: 'PT-2490', name: 'Patient PT-2490', indication: 'DLBCL', acuityScore: 0.61,
+    enrollmentDate: '2026-04-03', apheresisDate: '2026-04-08',
+    targetInfusionWindow: { start: '2026-04-21', end: '2026-04-25' },
+    treatmentCenter: 'Johns Hopkins', status: 'awaiting_assignment', isUrgent: false,
   },
 ];
 

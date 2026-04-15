@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import AppShell from '../components/layout/AppShell';
 import ConfidencePill from '../components/ui/ConfidencePill';
 import { patientPT2487, recommendationPT2487 } from '../data/mock';
-import { ChevronRight, ChevronDown, ExternalLink, Flag, Loader2, CheckCircle, X } from 'lucide-react';
+import { ChevronRight, ChevronDown, ExternalLink, Flag, CheckCircle, X } from 'lucide-react';
 import { api } from '../services/api';
 import { useApi } from '../hooks/useApi';
 
@@ -18,12 +18,11 @@ export default function PatientAssignmentPage() {
   const [overriding, setOverriding] = useState(false);
 
   const pid = patientId || 'PT-2487';
-  const { data: livePatient, loading: loadingPatient } = useApi(() => api.getPatient(pid), [pid]);
-  const { data: liveRec, loading: loadingRec } = useApi(() => api.getRecommendation(pid), [pid]);
+  const { data: livePatient } = useApi(() => api.getPatient(pid), [pid]);
+  const { data: liveRec } = useApi(() => api.getRecommendation(pid), [pid]);
 
   const rec = liveRec || recommendationPT2487;
   const patient = livePatient || patientPT2487;
-  const isLive = livePatient !== null;
 
   const handleApprove = async () => {
     try {
@@ -64,7 +63,7 @@ export default function PatientAssignmentPage() {
       <nav className="flex items-center gap-1.5 text-sm text-neutral-400 mb-4">
         <Link to="/coordinator" className="hover:text-primary">Home</Link>
         <ChevronRight className="w-3.5 h-3.5" />
-        <span>Patient queue</span>
+        <Link to="/coordinator/assignment" className="hover:text-primary">Patient queue</Link>
         <ChevronRight className="w-3.5 h-3.5" />
         <span className="text-neutral-700 font-medium">{patient.id} assignment</span>
       </nav>

@@ -3,7 +3,7 @@ import AppShell from '../components/layout/AppShell';
 import ActionCard from '../components/ui/ActionCard';
 import KpiTile from '../components/ui/KpiTile';
 import { actionCards as mockActionCards, batches as mockBatches, coordinatorKpis as mockKpis, suites as mockSuites } from '../data/mock';
-import { RefreshCw, Filter, Loader2 } from 'lucide-react';
+import { RefreshCw, Filter } from 'lucide-react';
 import type { BatchStatus } from '../types';
 import { api } from '../services/api';
 import { useApi } from '../hooks/useApi';
@@ -33,7 +33,7 @@ export default function CoordinatorHomePage() {
   const suites = liveSuites || mockSuites;
   const batches = liveBatches || mockBatches;
   const coordinatorKpis = liveKpis || mockKpis;
-  const actionCards = liveCards || mockActionCards;
+  const actionCards = (liveCards && liveCards.length > 0) ? liveCards : mockActionCards;
   const isLive = liveSuites !== null;
 
   const handleRefresh = () => {

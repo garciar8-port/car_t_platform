@@ -5,18 +5,21 @@ RUN corepack enable && corepack prepare pnpm@latest --activate
 
 WORKDIR /app
 
-COPY services/frontend/package.json services/frontend/pnpm-lock.yaml* ./
+COPY package.json pnpm-lock.yaml* ./
 RUN pnpm install --frozen-lockfile || pnpm install
 
-COPY services/frontend/ ./
+COPY . .
 RUN pnpm build
 
-# Stage 2 — serve
-FROM nginx:alpine
+# Stage 2 — serve with Express (handles SPA routing + access code API)
+FROM node:20-alpine
 
-COPY --from=build /app/dist /usr/share/nginx/html
-COPY services/frontend/nginx.conf /etc/nginx/conf.d/default.conf
+WORKDIR /app
 
-EXPOSE 80
+COPY --from=build /app/dist ./dist
+COPY server.js package.json ./
+RUN npm install --no-save express
 
-CMD ["nginx", "-g", "daemon off;"]
+EXPOSE 8080
+
+CMD ["node", "server.js"]
