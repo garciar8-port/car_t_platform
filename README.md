@@ -55,17 +55,30 @@ BioFlow models this as a Markov Decision Process and trains a PPO agent on a Sim
 
 ## Screenshots
 
-<!-- Replace these with actual screenshots from the running app -->
+### Coordinator Dashboard
+Three-column layout: action cards requiring attention, Gantt schedule with batch status across all suites, and real-time KPIs.
 
-| Coordinator Dashboard | Patient Assignment | Director KPIs |
-|---|---|---|
-| ![Coordinator](docs/screenshots/coordinator.png) | ![Assignment](docs/screenshots/assignment.png) | ![Director](docs/screenshots/director.png) |
+![Coordinator Dashboard](docs/screenshots/coordinator_dashboard.png)
 
-| Capacity Planning | Audit Trail |
-|---|---|
-| ![Capacity](docs/screenshots/capacity.png) | ![Audit](docs/screenshots/audit.png) |
+### Patient Assignment
+RL recommendation with SHAP explanation, alternative suites with tradeoffs, and approve/override/flag workflow.
 
-> **To capture screenshots:** Run the app locally, navigate each page, and save to `docs/screenshots/`. Key pages: `/coordinator`, `/coordinator/assignment/:id`, `/director`, `/director/capacity`, `/audit`.
+![Patient Assignment](docs/screenshots/patient_assignment.png)
+
+### Director KPIs
+Executive view with throughput, vein-to-vein time, utilization, failure rate, capacity forecast, and patient pipeline.
+
+![Director KPIs](docs/screenshots/director_kpis.png)
+
+### Capacity Planning
+What-if sandbox: adjust suite count, arrival rate, QC failure rate, and expansion duration, then run SimPy simulations to project throughput.
+
+![Capacity Planning](docs/screenshots/capacity_planning.png)
+
+### Audit Trail
+Filterable, 21 CFR Part 11-compliant audit log with hash-chain integrity, e-signature status, and override justifications.
+
+![Audit Trail](docs/screenshots/audit_trail.png)
 
 ---
 
