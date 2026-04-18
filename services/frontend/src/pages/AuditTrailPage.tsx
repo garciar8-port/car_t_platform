@@ -98,7 +98,7 @@ export default function AuditTrailPage() {
   };
 
   return (
-    <AppShell currentUser="QA Reviewer">
+    <AppShell currentUser={(() => { try { const u = sessionStorage.getItem('bioflow_user'); return u ? JSON.parse(u).name : 'QA Reviewer'; } catch { return 'QA Reviewer'; } })()}>
       <h1 className="text-lg font-semibold text-neutral-900 mb-4">Audit trail</h1>
 
       <div className="grid grid-cols-[1fr_220px] gap-6">
@@ -178,20 +178,39 @@ export default function AuditTrailPage() {
           <div className="space-y-3">
             <div>
               <div className="text-xs text-neutral-400">Total entries</div>
-              <div className="text-lg font-semibold text-neutral-800">247</div>
+              <div className="text-lg font-semibold text-neutral-800">{auditEntries.length}</div>
             </div>
             <div>
               <div className="text-xs text-neutral-400">Override rate</div>
-              <div className="text-lg font-semibold text-warning">14%</div>
-              <div className="text-[10px] text-neutral-400">32 of 234 recommendations</div>
+              {(() => {
+                const overrides = auditEntries.filter(e => e.actionType === 'override').length;
+                const decisions = auditEntries.filter(e => ['approve', 'override'].includes(e.actionType)).length;
+                const rate = decisions > 0 ? Math.round((overrides / decisions) * 100) : 0;
+                return (<>
+                  <div className="text-lg font-semibold text-warning">{rate}%</div>
+                  <div className="text-[10px] text-neutral-400">{overrides} of {decisions} recommendations</div>
+                </>);
+              })()}
             </div>
             <div>
               <div className="text-xs text-neutral-400">Most active user</div>
-              <div className="text-sm font-medium text-neutral-700">Maya R.</div>
+              <div className="text-sm font-medium text-neutral-700">
+                {(() => {
+                  const counts: Record<string, number> = {};
+                  auditEntries.forEach(e => { counts[e.user] = (counts[e.user] || 0) + 1; });
+                  return Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || '—';
+                })()}
+              </div>
             </div>
             <div>
-              <div className="text-xs text-neutral-400">Most overridden type</div>
-              <div className="text-sm font-medium text-neutral-700">preempt</div>
+              <div className="text-xs text-neutral-400">Most common action</div>
+              <div className="text-sm font-medium text-neutral-700">
+                {(() => {
+                  const counts: Record<string, number> = {};
+                  auditEntries.forEach(e => { counts[e.actionType] = (counts[e.actionType] || 0) + 1; });
+                  return Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || '—';
+                })()}
+              </div>
             </div>
           </div>
         </div>

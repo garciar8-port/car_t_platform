@@ -9,15 +9,41 @@ import { PlayCircle, FileText, Download, Clock, CheckCircle } from 'lucide-react
 import { api } from '../services/api';
 import { useApi } from '../hooks/useApi';
 
+function getGreeting(): string {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Good morning';
+  if (hour < 17) return 'Good afternoon';
+  return 'Good evening';
+}
+
+function getUserInfo() {
+  try {
+    const stored = sessionStorage.getItem('bioflow_user');
+    if (stored) return JSON.parse(stored);
+  } catch { /* fall through */ }
+  return { name: 'David M.', role: 'director', site: 'Rockville Site A' };
+}
+
 export default function DirectorHomePage() {
   const navigate = useNavigate();
   const { data: liveKpis } = useApi(() => api.getDirectorKpis(), []);
+  const { data: liveBatches } = useApi(() => api.getBatches(), []);
+  const { data: livePatients } = useApi(() => api.getPatientQueue(), []);
   const directorKpis = liveKpis || mockKpis;
   const [reportGenerated, setReportGenerated] = useState(false);
+  const user = getUserInfo();
+
+  // Derive pipeline numbers from live data
+  const inProcess = liveBatches?.length ?? 3;
+  const awaitingCells = livePatients?.filter(p => !p.isUrgent && p.status === 'awaiting_assignment').length ?? 2;
+  const inQueue = livePatients?.length ?? 7;
+  const urgent = livePatients?.filter(p => p.isUrgent).length ?? 2;
+  const pipelineTotal = Math.max(inProcess + awaitingCells + inQueue + urgent, 1);
+  const firstName = user.name.split(' ')[0];
   return (
-    <AppShell currentUser="David M." siteName="Rockville Site A">
+    <AppShell currentUser={user.name} siteName={user.site}>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-lg font-semibold text-neutral-900">Good morning, David</h1>
+        <h1 className="text-lg font-semibold text-neutral-900">{getGreeting()}, {firstName}</h1>
         <div className="flex items-center gap-2">
           <button
             onClick={() => navigate('/director/capacity')}
@@ -92,10 +118,10 @@ export default function DirectorHomePage() {
             <h3 className="text-sm font-medium text-neutral-700 mb-4">Patient pipeline</h3>
             {/* Stacked bar */}
             <div className="flex h-10 rounded-lg overflow-hidden mb-4">
-              <div className="bg-accent flex items-center justify-center text-white text-xs font-medium" style={{ width: `${(3/14)*100}%` }}>3</div>
-              <div className="bg-info flex items-center justify-center text-white text-xs font-medium" style={{ width: `${(2/14)*100}%` }}>2</div>
-              <div className="bg-neutral-300 flex items-center justify-center text-neutral-600 text-xs font-medium" style={{ width: `${(7/14)*100}%` }}>7</div>
-              <div className="bg-warning flex items-center justify-center text-white text-xs font-medium" style={{ width: `${(2/14)*100}%` }}>2</div>
+              {inProcess > 0 && <div className="bg-accent flex items-center justify-center text-white text-xs font-medium" style={{ width: `${(inProcess/pipelineTotal)*100}%` }}>{inProcess}</div>}
+              {awaitingCells > 0 && <div className="bg-info flex items-center justify-center text-white text-xs font-medium" style={{ width: `${(awaitingCells/pipelineTotal)*100}%` }}>{awaitingCells}</div>}
+              {inQueue > 0 && <div className="bg-neutral-300 flex items-center justify-center text-neutral-600 text-xs font-medium" style={{ width: `${(inQueue/pipelineTotal)*100}%` }}>{inQueue}</div>}
+              {urgent > 0 && <div className="bg-warning flex items-center justify-center text-white text-xs font-medium" style={{ width: `${(urgent/pipelineTotal)*100}%` }}>{urgent}</div>}
             </div>
             <div className="grid grid-cols-4 gap-2 text-xs">
               <div className="flex items-center gap-1.5">
@@ -115,7 +141,7 @@ export default function DirectorHomePage() {
                 <span className="text-neutral-500">Urgent</span>
               </div>
             </div>
-            <p className="text-xs text-neutral-400 mt-4">14 total patients, 14% urgent share</p>
+            <p className="text-xs text-neutral-400 mt-4">{pipelineTotal} total patients, {pipelineTotal > 0 ? Math.round((urgent / pipelineTotal) * 100) : 0}% urgent share</p>
           </div>
         </div>
       </section>

@@ -20,12 +20,16 @@ export default function CapacityPlanningPage() {
   const [timeHorizon, setTimeHorizon] = useState(30);
   const [state, setState] = useState<'idle' | 'running' | 'done'>('idle');
   const [saved, setSaved] = useState(false);
+  const [simResults, setSimResults] = useState<{ throughput: number; avgWait: number; utilization: number; totalInfusions: number; totalFailures: number; failureRate: number } | null>(null);
 
   const handleRun = async () => {
     setState('running');
     try {
-      await api.runCapacitySimulation({ suiteCount, arrivalRate, qcFailRate, expansionDuration, timeHorizon });
-    } catch { /* fall through to show mock results */ }
+      const results = await api.runCapacitySimulation({ suiteCount, arrivalRate, qcFailRate, expansionDuration, timeHorizon });
+      setSimResults(results);
+    } catch {
+      setSimResults({ throughput: 0, avgWait: 0, utilization: 0, totalInfusions: 0, totalFailures: 0, failureRate: 0 });
+    }
     setState('done');
   };
 
@@ -35,7 +39,7 @@ export default function CapacityPlanningPage() {
   };
 
   return (
-    <AppShell currentUser="David M.">
+    <AppShell currentUser={(() => { try { const u = sessionStorage.getItem('bioflow_user'); return u ? JSON.parse(u).name : 'David M.'; } catch { return 'David M.'; } })()}>
       <h1 className="text-lg font-semibold text-neutral-900 mb-4">Capacity planning — What-if analysis</h1>
 
       <div className="grid grid-cols-[30%_70%] gap-6">
@@ -138,18 +142,18 @@ export default function CapacityPlanningPage() {
               <div className="grid grid-cols-3 gap-3">
                 <div className="bg-white border border-neutral-200 rounded-lg p-4">
                   <div className="text-xs text-neutral-400 uppercase tracking-wide">Projected throughput</div>
-                  <div className="text-2xl font-semibold text-neutral-900">28 <span className="text-sm font-normal text-neutral-400">batches/week</span></div>
-                  <div className="text-sm text-success font-medium">+27% vs current</div>
+                  <div className="text-2xl font-semibold text-neutral-900">{simResults?.throughput ?? 0} <span className="text-sm font-normal text-neutral-400">batches/week</span></div>
+                  <div className="text-sm text-neutral-500">{simResults?.totalInfusions ?? 0} total infusions over {timeHorizon}d</div>
                 </div>
                 <div className="bg-white border border-neutral-200 rounded-lg p-4">
                   <div className="text-xs text-neutral-400 uppercase tracking-wide">Projected avg wait</div>
-                  <div className="text-2xl font-semibold text-neutral-900">9.1 <span className="text-sm font-normal text-neutral-400">days</span></div>
-                  <div className="text-sm text-success font-medium">-2.3 days vs current</div>
+                  <div className="text-2xl font-semibold text-neutral-900">{simResults?.avgWait ?? 0} <span className="text-sm font-normal text-neutral-400">days</span></div>
+                  <div className="text-sm text-neutral-500">Failure rate: {simResults?.failureRate ?? 0}%</div>
                 </div>
                 <div className="bg-white border border-neutral-200 rounded-lg p-4">
                   <div className="text-xs text-neutral-400 uppercase tracking-wide">Projected utilization</div>
-                  <div className="text-2xl font-semibold text-neutral-900">72%</div>
-                  <div className="text-sm text-warning font-medium">-9pp vs current</div>
+                  <div className="text-2xl font-semibold text-neutral-900">{Math.round((simResults?.utilization ?? 0) * 100)}%</div>
+                  <div className="text-sm text-neutral-500">{suiteCount} suites, {arrivalRate}/day arrivals</div>
                 </div>
               </div>
 

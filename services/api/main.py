@@ -636,7 +636,12 @@ MODEL_VERSION = "v0.4.0-phase4"
 
 @app.on_event("startup")
 async def startup():
-    model_path = Path(__file__).parent.parent.parent / "training" / "results" / "ppo_phase4"
+    import os
+    model_path_env = os.getenv("MODEL_PATH")
+    if model_path_env and Path(model_path_env).exists():
+        model_path = Path(model_path_env)
+    else:
+        model_path = Path(__file__).parent.parent.parent / "training" / "results" / "ppo_phase4"
     manager.initialize(str(model_path) if model_path.exists() else None)
     # Run a few steps to populate state
     for _ in range(3):
@@ -871,10 +876,104 @@ async def save_handoff():
     return {"status": "saved", "signed": True}
 
 
+class CapacitySimulationRequest(BaseModel):
+    suiteCount: int = Field(default=6, ge=4, le=12)
+    arrivalRate: float = Field(default=1.8, ge=0.5, le=5.0)
+    qcFailRate: float = Field(default=12, ge=5, le=25)
+    expansionDuration: float = Field(default=14, ge=10, le=20)
+    timeHorizon: int = Field(default=30, ge=30, le=180)
+
+
 @app.post("/api/v1/capacity/simulate")
-async def run_capacity_simulation():
+async def run_capacity_simulation(req: CapacitySimulationRequest):
+    """Run SimPy capacity simulation with user-specified parameters.
+
+    Runs multiple independent trajectories and returns aggregate metrics.
+    """
+    from bioflow_scheduler.simulator.environment import (
+        ManufacturingSimulator,
+        DEFAULT_PHASE_DURATIONS,
+        PhaseDurationConfig,
+        DistributionType,
+    )
+    from bioflow_scheduler.mdp.schemas import (
+        TransitionDistributions,
+        RewardWeights,
+        NoOpAction,
+    )
+
+    n_trajectories = 20  # balance speed vs accuracy for interactive use
+
+    all_infusions: list[int] = []
+    all_failures: list[int] = []
+    all_wait_days: list[float] = []
+    all_utilization: list[float] = []
+
+    for i in range(n_trajectories):
+        td = TransitionDistributions(
+            patient_arrival_rate=req.arrivalRate / 7.0,  # convert weekly to daily
+            qc_pass_probability=1.0 - req.qcFailRate / 100.0,
+            expansion_duration_log_mean=float(np.log(req.expansionDuration)),
+            expansion_duration_log_std=0.25,
+        )
+        fc = FacilityConfig(
+            num_suites=req.suiteCount,
+            transition_distributions=td,
+            max_episode_days=req.timeHorizon,
+            decision_interval_hours=8.0,
+            seed=42 + i,
+        )
+
+        # Override expansion phase duration mean to match slider
+        phase_durations = dict(DEFAULT_PHASE_DURATIONS)
+        phase_durations[BatchPhase.EXPANSION] = PhaseDurationConfig(
+            mean_days=req.expansionDuration,
+            std_days=3.0,
+            distribution=DistributionType.LOGNORMAL,
+        )
+
+        sim = ManufacturingSimulator(fc, phase_durations=phase_durations)
+        state = sim.reset()
+
+        # Run with highest-acuity-first heuristic (simple, effective baseline)
+        done = False
+        total_idle_intervals = 0
+        total_intervals = 0
+        while not done:
+            # Assign highest-acuity patient to first idle suite
+            action = NoOpAction()
+            if state.idle_suites and state.patient_queue:
+                best = max(state.patient_queue, key=lambda p: p.acuity_score)
+                action = AssignAction(
+                    patient_id=best.patient_id,
+                    suite_id=state.idle_suites[0].id,
+                    start_time=state.clock,
+                )
+
+            state, reward, done, info = sim.step(action)
+            total_intervals += 1
+            idle_count = sum(1 for s in state.suites if s.status == SuiteStatus.IDLE)
+            total_idle_intervals += idle_count
+
+        infusions = sum(1 for b in sim._batches.values() if b.completed and not b.failed)
+        failures = sum(1 for b in sim._batches.values() if b.failed)
+        avg_wait = float(np.mean([p.days_waiting for p in state.patient_queue])) if state.patient_queue else 0.0
+        utilization = 1.0 - (total_idle_intervals / (total_intervals * req.suiteCount)) if total_intervals > 0 else 0.0
+
+        all_infusions.append(infusions)
+        all_failures.append(failures)
+        all_wait_days.append(avg_wait)
+        all_utilization.append(utilization)
+
+    # Weekly throughput = total infusions / (horizon_days / 7)
+    weeks = req.timeHorizon / 7.0
+    mean_throughput = float(np.mean(all_infusions)) / weeks if weeks > 0 else 0.0
+
     return {
-        "throughput": 28,
-        "avgWait": 9.1,
-        "utilization": 0.72,
+        "throughput": round(mean_throughput, 1),
+        "avgWait": round(float(np.mean(all_wait_days)), 1),
+        "utilization": round(float(np.mean(all_utilization)), 2),
+        "totalInfusions": round(float(np.mean(all_infusions)), 1),
+        "totalFailures": round(float(np.mean(all_failures)), 1),
+        "failureRate": round(float(np.mean(all_failures)) / max(float(np.mean(all_infusions)) + float(np.mean(all_failures)), 1) * 100, 1),
     }

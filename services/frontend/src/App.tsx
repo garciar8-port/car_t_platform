@@ -15,7 +15,7 @@ import PatientQueuePage from './pages/PatientQueuePage';
 
 export default function App() {
   const [authenticated, setAuthenticated] = useState(
-    () => sessionStorage.getItem('demo_authenticated') === 'true'
+    () => import.meta.env.DEV || sessionStorage.getItem('demo_authenticated') === 'true'
   );
 
   if (!authenticated) {

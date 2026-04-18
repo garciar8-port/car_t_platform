@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   postgres:
     image: postgres:16-alpine
@@ -43,7 +41,9 @@ services:
       REDIS_URL: redis://redis:6379/0
       SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
       MLFLOW_TRACKING_URI: http://mlflow:5001
-      MODEL_PATH: ${MODEL_PATH:-/app/models/ppo_phase4}
+      MODEL_PATH: /app/training/results/ppo_phase4
+    volumes:
+      - ./training/results:/app/training/results:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -52,11 +52,13 @@ services:
 
   frontend:
     build:
-      context: .
-      dockerfile: services/frontend/Dockerfile
+      context: services/frontend/
+      dockerfile: Dockerfile
     restart: unless-stopped
     ports:
-      - "80:80"
+      - "80:8080"
+    environment:
+      VITE_API_URL: http://localhost:8000
     depends_on:
       - api
 

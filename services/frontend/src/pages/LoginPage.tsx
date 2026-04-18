@@ -26,7 +26,10 @@ export default function LoginPage() {
 
             <div className="grid grid-cols-2 gap-4">
               <button
-                onClick={() => navigate('/coordinator')}
+                onClick={() => {
+                  sessionStorage.setItem('bioflow_user', JSON.stringify({ name: 'Maya R.', role: 'coordinator', site: 'Rockville Site A' }));
+                  navigate('/coordinator');
+                }}
                 className="flex flex-col items-center gap-3 p-6 border border-neutral-200 rounded-lg hover:border-primary hover:bg-primary/5 transition-all group"
               >
                 <ClipboardList className="w-10 h-10 text-neutral-400 group-hover:text-primary transition-colors" />
@@ -36,7 +39,10 @@ export default function LoginPage() {
               </button>
 
               <button
-                onClick={() => navigate('/director')}
+                onClick={() => {
+                  sessionStorage.setItem('bioflow_user', JSON.stringify({ name: 'David M.', role: 'director', site: 'Rockville Site A' }));
+                  navigate('/director');
+                }}
                 className="flex flex-col items-center gap-3 p-6 border border-neutral-200 rounded-lg hover:border-primary hover:bg-primary/5 transition-all group"
               >
                 <BarChart3 className="w-10 h-10 text-neutral-400 group-hover:text-primary transition-colors" />

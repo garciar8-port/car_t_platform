@@ -1,0 +1,34 @@
+{
+  "learning_rate": 3e-4,
+  "n_steps": 4096,
+  "batch_size": 128,
+  "n_epochs": 10,
+  "gamma": 0.95,
+  "gae_lambda": 0.95,
+  "clip_range": 0.2,
+  "ent_coef": 0.005,
+  "vf_coef": 0.5,
+  "max_grad_norm": 0.5,
+  "total_timesteps": 2000000,
+  "log_interval": 10,
+  "net_arch_pi": [256, 256],
+  "net_arch_vf": [256, 256],
+  "facility_config": {
+    "num_suites": 6,
+    "seed": 42,
+    "max_episode_days": 90,
+    "decision_interval_hours": 8.0,
+    "reward_weights": {
+      "wait_time": 1.5,
+      "idle_time": 0.5,
+      "batch_failure": 50.0,
+      "successful_infusion": 100.0,
+      "constraint_violation": 1000.0,
+      "valid_assignment": 25.0,
+      "acuity_exponent": 2.0
+    }
+  },
+  "max_patients": 20,
+  "save_path": "training/results/ppo_phase5",
+  "seed": 42
+}

@@ -7,7 +7,7 @@ interface UseApiResult<T> {
   refetch: () => void;
 }
 
-export function useApi<T>(fetcher: () => Promise<T>, deps: unknown[] = []): UseApiResult<T> {
+export function useApi<T>(fetcher: () => Promise<T>, deps: unknown[] = [], onSuccess?: () => void): UseApiResult<T> {
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -16,7 +16,7 @@ export function useApi<T>(fetcher: () => Promise<T>, deps: unknown[] = []): UseA
     setLoading(true);
     setError(null);
     fetcher()
-      .then(setData)
+      .then((result) => { setData(result); onSuccess?.(); })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, deps);

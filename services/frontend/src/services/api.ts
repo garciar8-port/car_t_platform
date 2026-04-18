@@ -78,7 +78,7 @@ export const api = {
     }),
 
   runCapacitySimulation: (params: { suiteCount: number; arrivalRate: number; qcFailRate: number; expansionDuration: number; timeHorizon: number }) =>
-    fetchJson<{ throughput: number; avgWait: number; utilization: number }>('/api/v1/capacity/simulate', {
+    fetchJson<{ throughput: number; avgWait: number; utilization: number; totalInfusions: number; totalFailures: number; failureRate: number }>('/api/v1/capacity/simulate', {
       method: 'POST',
       body: JSON.stringify(params),
     }),

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import AppShell from '../components/layout/AppShell';
 import ActionCard from '../components/ui/ActionCard';
 import KpiTile from '../components/ui/KpiTile';
@@ -18,12 +18,19 @@ const batchStatusColors: Record<BatchStatus, string> = {
 
 type ViewRange = '24h' | '48h' | '7d';
 
+function formatTime(d: Date): string {
+  return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).toLowerCase();
+}
+
 export default function CoordinatorHomePage() {
   const [viewRange, setViewRange] = useState<ViewRange>('24h');
+  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
   const totalHours = viewRange === '24h' ? 24 : viewRange === '48h' ? 48 : 168;
   const currentHour = new Date().getHours();
 
-  const { data: liveSuites, refetch: refetchSuites } = useApi(() => api.getSuites(), []);
+  const onDataLoaded = useCallback(() => setLastUpdated(new Date()), []);
+
+  const { data: liveSuites, refetch: refetchSuites } = useApi(() => api.getSuites(), [], onDataLoaded);
   const { data: liveBatches, refetch: refetchBatches } = useApi(() => api.getBatches(), []);
   const { data: liveKpis } = useApi(() => api.getCoordinatorKpis(), []);
   const { data: liveCards } = useApi(() => api.getActionCards(), []);
@@ -40,6 +47,7 @@ export default function CoordinatorHomePage() {
     api.stepSimulation().then(() => {
       refetchSuites();
       refetchBatches();
+      setLastUpdated(new Date());
     });
   };
 
@@ -90,7 +98,7 @@ export default function CoordinatorHomePage() {
               </button>
             </div>
           </div>
-          <div className="text-[10px] text-neutral-400 mb-1 text-right">Last updated: 8:02am</div>
+          <div className="text-[10px] text-neutral-400 mb-1 text-right">Last updated: {formatTime(lastUpdated)}</div>
 
           {/* Gantt Chart */}
           <div className="bg-white border border-neutral-200 rounded-lg overflow-hidden flex-1 min-h-0">
